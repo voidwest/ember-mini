@@ -51,4 +51,16 @@ mod tests {
         assert_eq!(out.len(), 32);
         assert_eq!(&out[..3], &[-1.0, 2.0, 0.0]);
     }
+
+    #[test]
+    fn f16_bytes_become_f32() {
+        // 1.0 is 0x3C00 and -2.0 is 0xC000 in f16, little-endian.
+        assert_eq!(f16_to_f32(&[0x00, 0x3C, 0x00, 0xC0]), vec![1.0, -2.0]);
+    }
+
+    #[test]
+    fn f32_bytes_become_f32() {
+        let bytes = [1.5f32.to_le_bytes(), (-0.25f32).to_le_bytes()].concat();
+        assert_eq!(f32_from_bytes(&bytes), vec![1.5, -0.25]);
+    }
 }

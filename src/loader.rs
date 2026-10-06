@@ -208,3 +208,101 @@ impl<'a> Reader<'a> {
         })
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn write_string(f: &mut Vec<u8>, s: &str) {
+        f.extend((s.len() as u64).to_le_bytes());
+        f.extend(s.as_bytes());
+    }
+
+    /// Makes a small GGUF file with four metadata keys and two tensors.
+    fn tiny_gguf() -> Vec<u8> {
+        let mut f = Vec::new();
+        f.extend(b"GGUF");
+        f.extend(3u32.to_le_bytes()); // version
+        f.extend(2u64.to_le_bytes()); // tensor count
+        f.extend(4u64.to_le_bytes()); // metadata count
+
+        write_string(&mut f, "general.architecture");
+        f.extend(8u32.to_le_bytes()); // type: string
+        write_string(&mut f, "gpt2");
+        write_string(&mut f, "gpt2.block_count");
+        f.extend(4u32.to_le_bytes()); // type: u32
+        f.extend(12u32.to_le_bytes());
+        write_string(&mut f, "gpt2.attention.layer_norm_epsilon");
+        f.extend(6u32.to_le_bytes()); // type: f32
+        f.extend(1e-5f32.to_le_bytes());
+        write_string(&mut f, "tokenizer.ggml.tokens");
+        f.extend(9u32.to_le_bytes()); // type: array
+        f.extend(8u32.to_le_bytes()); // of strings
+        f.extend(2u64.to_le_bytes()); // with 2 items
+        write_string(&mut f, "hi");
+        write_string(&mut f, "there");
+
+        // Tensor "a": 2 rows of 3 F32 values. GGUF writes the innermost
+        // dimension first, so the dimensions are 3, 2.
+        write_string(&mut f, "a");
+        f.extend(2u32.to_le_bytes());
+        f.extend(3u64.to_le_bytes());
+        f.extend(2u64.to_le_bytes());
+        f.extend(TYPE_F32.to_le_bytes());
+        f.extend(0u64.to_le_bytes()); // offset
+                                      // Tensor "q": one Q8_0 block of 32 values. "a" uses 24 bytes, so
+                                      // "q" starts at the next multiple of 32.
+        write_string(&mut f, "q");
+        f.extend(1u32.to_le_bytes());
+        f.extend(32u64.to_le_bytes());
+        f.extend(TYPE_Q8_0.to_le_bytes());
+        f.extend(32u64.to_le_bytes()); // offset
+
+        // The data starts at the next multiple of 32.
+        while f.len() % 32 != 0 {
+            f.push(0);
+        }
+        for i in 0..6 {
+            f.extend((i as f32).to_le_bytes());
+        }
+        f.extend([0u8; 8]); // padding up to offset 32
+        f.extend(half::f16::from_f32(0.5).to_le_bytes());
+        f.extend(0u8..32);
+        f
+    }
+
+    #[test]
+    fn reads_metadata_and_tensors() {
+        let name = format!("ember-mini-test-{}.gguf", std::process::id());
+        let path = std::env::temp_dir().join(name);
+        std::fs::write(&path, tiny_gguf()).unwrap();
+        let gguf = load(path.to_str().unwrap());
+        std::fs::remove_file(&path).unwrap();
+        let gguf = gguf.unwrap();
+
+        assert_eq!(gguf.get_str("general.architecture"), Some("gpt2"));
+        assert_eq!(gguf.get_usize("gpt2.block_count").unwrap(), 12);
+        assert_eq!(
+            gguf.get_f32("gpt2.attention.layer_norm_epsilon"),
+            Some(1e-5)
+        );
+
+        let a = &gguf.tensors["a"];
+        assert_eq!(a.shape, [2, 3]);
+        assert_eq!(a.data, [0.0, 1.0, 2.0, 3.0, 4.0, 5.0]);
+        let q = &gguf.tensors["q"];
+        assert_eq!(q.shape, [32]);
+        assert_eq!(q.data[..3], [0.0, 0.5, 1.0]);
+        assert_eq!(q.data[31], 15.5);
+    }
+
+    #[test]
+    fn rejects_a_file_that_is_not_gguf() {
+        let name = format!("ember-mini-test-bad-{}.gguf", std::process::id());
+        let path = std::env::temp_dir().join(name);
+        std::fs::write(&path, b"NOPE and some more bytes").unwrap();
+        let result = load(path.to_str().unwrap());
+        std::fs::remove_file(&path).unwrap();
+        assert!(result.is_err());
+    }
+}

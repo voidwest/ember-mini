@@ -66,3 +66,79 @@ pub fn argmax(x: &[f32]) -> usize {
     }
     best
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn assert_close(got: &[f32], want: &[f32]) {
+        assert_eq!(got.len(), want.len());
+        for (g, w) in got.iter().zip(want) {
+            assert!((g - w).abs() < 1e-5, "got {got:?}, want {want:?}");
+        }
+    }
+
+    #[test]
+    fn dot_multiplies_pairs_and_adds_them() {
+        assert_eq!(dot(&[1.0, 2.0, 3.0], &[4.0, 5.0, 6.0]), 32.0);
+    }
+
+    #[test]
+    fn matvec_uses_one_row_for_each_output() {
+        // W = [[1, 2], [3, 4], [5, 6]], x = [1, 1], b = [0.5, 0, -1]
+        let w = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0];
+        let mut out = [0.0; 3];
+        matvec(&w, Some(&[0.5, 0.0, -1.0]), &[1.0, 1.0], &mut out);
+        assert_eq!(out, [3.5, 7.0, 10.0]);
+        matvec(&w, None, &[1.0, 1.0], &mut out);
+        assert_eq!(out, [3.0, 7.0, 11.0]);
+    }
+
+    #[test]
+    fn layer_norm_gives_mean_0_and_variance_1() {
+        let mut out = [0.0; 4];
+        layer_norm(&[1.0, 2.0, 3.0, 4.0], &[1.0; 4], &[0.0; 4], 0.0, &mut out);
+        assert_close(&out, &[-1.3416408, -0.4472136, 0.4472136, 1.3416408]);
+    }
+
+    #[test]
+    fn layer_norm_then_scales_and_shifts() {
+        let mut out = [0.0; 4];
+        layer_norm(&[1.0, 2.0, 3.0, 4.0], &[2.0; 4], &[1.0; 4], 0.0, &mut out);
+        assert_close(&out, &[-1.6832816, 0.1055728, 1.8944272, 3.6832816]);
+    }
+
+    #[test]
+    fn gelu_matches_known_values() {
+        let mut x = [0.0, 1.0, -1.0, 3.0];
+        gelu(&mut x);
+        assert_close(&x, &[0.0, 0.841192, -0.158808, 2.9963626]);
+    }
+
+    #[test]
+    fn softmax_gives_probabilities() {
+        let mut x = [1.0, 2.0, 3.0];
+        softmax(&mut x);
+        assert_close(&x, &[0.09003057, 0.24472847, 0.66524096]);
+    }
+
+    #[test]
+    fn softmax_does_not_overflow_with_large_scores() {
+        let mut x = [1000.0, 1000.0];
+        softmax(&mut x);
+        assert_close(&x, &[0.5, 0.5]);
+    }
+
+    #[test]
+    fn add_adds_in_place() {
+        let mut x = [1.0, 2.0];
+        add(&mut x, &[3.0, 4.0]);
+        assert_eq!(x, [4.0, 6.0]);
+    }
+
+    #[test]
+    fn argmax_finds_the_first_largest_value() {
+        assert_eq!(argmax(&[0.1, 3.0, -1.0, 3.0]), 1);
+        assert_eq!(argmax(&[-5.0, -2.0, -9.0]), 1);
+    }
+}

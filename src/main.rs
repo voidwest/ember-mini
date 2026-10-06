@@ -6,7 +6,7 @@
 //!                                   +--------------------------------+
 //! ```
 //!
-//! Usage: `cargo run --release -- "your prompt" [number of new tokens]`
+//! Usage: `cargo run -- "your prompt" [number of new tokens]`
 
 mod kv_cache;
 mod loader;
@@ -14,6 +14,8 @@ mod model;
 mod ops;
 mod quant;
 
+use kv_cache::KvCache;
+use model::Gpt2;
 use std::io::Write;
 use std::time::Instant;
 use tokenizers::Tokenizer;
@@ -37,7 +39,7 @@ fn main() -> Result<()> {
 
     // 1. Load the weights and the tokenizer.
     let start = Instant::now();
-    let model = model::Gpt2::from_gguf(loader::load(MODEL_PATH)?)?;
+    let model = Gpt2::from_gguf(loader::load(MODEL_PATH)?)?;
     let tokenizer = Tokenizer::from_file(TOKENIZER_PATH)
         .map_err(|e| format!("cannot load {TOKENIZER_PATH}: {e}"))?;
     let cfg = &model.config;
@@ -60,11 +62,37 @@ fn main() -> Result<()> {
     }
     let n_prompt = tokens.len();
 
+    // 3 and 4. Run the prompt, then generate new tokens.
+    print!("{prompt}");
+    let start = Instant::now();
+    let n_forward = generate(&model, &tokenizer, &mut tokens, n_new)?;
+    println!();
+
+    eprintln!(
+        "{} prompt tokens, {} new tokens, {:.1} forward passes/s",
+        n_prompt,
+        tokens.len() - n_prompt,
+        n_forward as f32 / start.elapsed().as_secs_f32()
+    );
+    Ok(())
+}
+
+/// Runs the prompt in `tokens` through the model. Then adds up to `n_new`
+/// tokens to `tokens`, one at a time, and prints the new text.
+/// Returns the number of forward passes.
+fn generate(
+    model: &Gpt2,
+    tokenizer: &Tokenizer,
+    tokens: &mut Vec<u32>,
+    n_new: usize,
+) -> Result<usize> {
+    let cfg = &model.config;
+    let n_prompt = tokens.len();
+    let mut cache = KvCache::new(cfg.n_layers, cfg.n_ctx, cfg.d_model);
+    let mut n_forward = 0;
+
     // 3. Prefill: run all prompt tokens except the last one. This only fills
     // the KV cache. The generation loop below runs the last prompt token.
-    let mut cache = kv_cache::KvCache::new(cfg.n_layers, cfg.n_ctx, cfg.d_model);
-    let start = Instant::now();
-    let mut n_forward = 0;
     for (pos, &token) in tokens[..n_prompt - 1].iter().enumerate() {
         model.forward(token, pos, &mut cache);
         n_forward += 1;
@@ -72,7 +100,6 @@ fn main() -> Result<()> {
 
     // 4. Generation: run the newest token, take the token with the highest
     // score (greedy decoding), add it to the text, and do it again.
-    print!("{prompt}");
     let mut printed = 0;
     for _ in 0..n_new {
         let pos = tokens.len() - 1;
@@ -86,24 +113,23 @@ fn main() -> Result<()> {
             break;
         }
         tokens.push(next);
-
-        // Decode all new tokens again each time: one character (for example
-        // an emoji) can be split across two tokens. A partial character
-        // decodes as U+FFFD, so wait for the next token in that case.
-        let text = tokenizer.decode(&tokens[n_prompt..], false)?;
-        if !text.ends_with('\u{FFFD}') {
-            print!("{}", &text[printed..]);
-            std::io::stdout().flush()?;
-            printed = text.len();
-        }
+        print_new_text(tokenizer, &tokens[n_prompt..], &mut printed)?;
     }
-    println!();
+    Ok(n_forward)
+}
 
-    eprintln!(
-        "{} prompt tokens, {} new tokens, {:.1} forward passes/s",
-        n_prompt,
-        tokens.len() - n_prompt,
-        n_forward as f32 / start.elapsed().as_secs_f32()
-    );
+/// Prints the part of the text of `new_tokens` that is not printed yet.
+/// `printed` is the number of bytes that are printed already.
+///
+/// It decodes all new tokens again each time, because one character (for
+/// example an emoji) can be split across two tokens. A partial character
+/// decodes as U+FFFD, so the function waits for the next token in that case.
+fn print_new_text(tokenizer: &Tokenizer, new_tokens: &[u32], printed: &mut usize) -> Result<()> {
+    let text = tokenizer.decode(new_tokens, false)?;
+    if !text.ends_with('\u{FFFD}') {
+        print!("{}", &text[*printed..]);
+        std::io::stdout().flush()?;
+        *printed = text.len();
+    }
     Ok(())
 }

@@ -16,3 +16,8 @@ publish = false
 tokenizers = { version = "0.20", default-features = false, features = ["onig"] }
 # Converts f16 to f32: the scale of each Q8_0 block is an f16.
 half = "2"
+
+# Optimize normal (debug) builds too: without optimization, the model is very
+# slow. Debug builds keep the overflow checks, which help to find bugs.
+[profile.dev]
+opt-level = 2

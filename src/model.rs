@@ -213,3 +213,39 @@ fn take_norm(gguf: &mut Gguf, name: &str, d: usize) -> Result<LayerNorm> {
         bias: take(gguf, &format!("{name}.bias"), &[d])?,
     })
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{loader, MODEL_PATH};
+
+    /// This test needs the real model file. See the README.
+    #[test]
+    fn gpt2_continues_a_known_prompt() {
+        assert!(
+            std::path::Path::new(MODEL_PATH).exists(),
+            "download {MODEL_PATH} into the project folder first (see the README)"
+        );
+        let model = Gpt2::from_gguf(loader::load(MODEL_PATH).unwrap()).unwrap();
+        let cfg = &model.config;
+        let mut cache = KvCache::new(cfg.n_layers, cfg.n_ctx, cfg.d_model);
+
+        // "The capital of France is", as GPT-2 token ids.
+        let prompt = [464, 3139, 286, 4881, 318];
+        let mut logits = Vec::new();
+        for (pos, &token) in prompt.iter().enumerate() {
+            logits = model.forward(token, pos, &mut cache);
+        }
+        assert_eq!(logits.len(), cfg.n_vocab);
+
+        // Greedy decoding of 8 more tokens.
+        let mut generated = Vec::new();
+        for pos in prompt.len()..prompt.len() + 8 {
+            let next = ops::argmax(&logits) as u32;
+            generated.push(next);
+            logits = model.forward(next, pos, &mut cache);
+        }
+        // " the capital of France, and it is"
+        assert_eq!(generated, [262, 3139, 286, 4881, 11, 290, 340, 318]);
+    }
+}

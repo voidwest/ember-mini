@@ -45,3 +45,27 @@ impl KvCache {
         &self.v[s..s + self.d_model]
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn reads_back_what_it_stores() {
+        let mut cache = KvCache::new(2, 4, 3);
+        cache.store(1, 2, &[1.0, 2.0, 3.0], &[4.0, 5.0, 6.0]);
+        assert_eq!(cache.key(1, 2), &[1.0, 2.0, 3.0]);
+        assert_eq!(cache.value(1, 2), &[4.0, 5.0, 6.0]);
+    }
+
+    #[test]
+    fn layers_and_positions_do_not_overlap() {
+        let mut cache = KvCache::new(2, 4, 3);
+        cache.store(0, 3, &[1.0; 3], &[1.0; 3]);
+        cache.store(1, 0, &[2.0; 3], &[2.0; 3]);
+        assert_eq!(cache.key(0, 3), &[1.0; 3]);
+        assert_eq!(cache.key(1, 0), &[2.0; 3]);
+        assert_eq!(cache.key(0, 2), &[0.0; 3]);
+        assert_eq!(cache.value(1, 1), &[0.0; 3]);
+    }
+}
