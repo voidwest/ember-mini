@@ -1,0 +1,18 @@
+[package]
+name = "ember-mini"
+version = "0.1.0"
+edition = "2021"
+# `as_chunks` (in quant.rs) is stable from Rust 1.88.
+rust-version = "1.88"
+description = "An educational, minimal GPT-2 inference engine"
+license = "MIT"
+repository = "https://github.com/voidwest/ember-mini"
+# This is an educational project, not a library for crates.io.
+publish = false
+
+[dependencies]
+# Reads tokenizer.json and does the GPT-2 byte-level BPE. `onig` is the regex
+# engine for the pre-tokenizer. The other default features are not necessary.
+tokenizers = { version = "0.20", default-features = false, features = ["onig"] }
+# Converts f16 to f32: the scale of each Q8_0 block is an f16.
+half = "2"
