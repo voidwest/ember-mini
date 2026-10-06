@@ -7,6 +7,9 @@
 //! 4. Tensor data: the raw bytes, which start at an aligned offset.
 //!
 //! All numbers are little-endian.
+//!
+//! EXERCISE 4. Write `Reader::string`, `Reader::value` and `load`. The other
+//! parts are done. Check your work with `cargo test loader`.
 
 use crate::quant;
 use crate::Result;
@@ -73,80 +76,46 @@ pub fn load(path: &str) -> Result<Gguf> {
         pos: 0,
     };
 
-    // 1. Header.
-    if r.take(4)? != b"GGUF" {
-        return Err(format!("{path} is not a GGUF file").into());
-    }
-    let version = r.u32()?;
-    if version != 2 && version != 3 {
-        return Err(format!("unsupported GGUF version {version}").into());
-    }
-    let n_tensors = r.u64()?;
-    let n_metadata = r.u64()?;
+    // TODO 1. The header:
+    //   - 4 bytes: the magic "GGUF". If they are different, return an error.
+    //   - u32: the version. Accept 2 and 3.
+    //   - u64: the number of tensors.
+    //   - u64: the number of metadata key/value pairs.
+    // Hint: `return Err("message".into());` returns an error. `format!` works
+    // too: `Err(format!("bad version {version}").into())`.
 
-    // 2. Metadata.
-    let mut metadata = HashMap::new();
-    for _ in 0..n_metadata {
-        let key = r.string()?;
-        let value_type = r.u32()?;
-        metadata.insert(key, r.value(value_type)?);
-    }
+    // TODO 2. The metadata. For each pair, read:
+    //   - a string: the key
+    //   - u32: the value type
+    //   - the value. Write `Reader::value` (below) for this.
+    // Put the pairs into a `HashMap<String, Value>`.
 
-    // 3. Tensor infos. The data for all tensors comes after the last info.
-    let mut infos = Vec::new();
-    for _ in 0..n_tensors {
-        let name = r.string()?;
-        let n_dims = r.u32()?;
-        let mut shape = Vec::new();
-        for _ in 0..n_dims {
-            shape.push(r.u64()? as usize);
-        }
-        // GGUF writes the innermost dimension first. Reverse it to get the
-        // usual row-major order.
-        shape.reverse();
-        let data_type = r.u32()?;
-        let offset = r.u64()? as usize;
-        infos.push((name, shape, data_type, offset));
-    }
+    // TODO 3. The tensor infos. For each tensor, read:
+    //   - a string: the name
+    //   - u32: the number of dimensions
+    //   - u64 for each dimension. GGUF writes the INNERMOST dimension first:
+    //     a matrix of 2 rows of 3 numbers is written as [3, 2]. Reverse the
+    //     list to get the row-major shape [2, 3] that `Tensor` uses.
+    //   - u32: the data type (TYPE_F32, TYPE_F16 or TYPE_Q8_0)
+    //   - u64: the offset of the data, from the start of the data section
+    // Keep the infos in a list. The data comes after the last info.
 
-    // 4. Tensor data. It starts at the next multiple of the alignment, and
-    // each tensor offset is relative to that start.
-    let alignment = match metadata.get("general.alignment") {
-        Some(Value::UInt(n)) => *n as usize,
-        _ => 32,
-    };
-    let data_start = r.pos.div_ceil(alignment) * alignment;
-
-    let mut tensors = HashMap::new();
-    for (name, shape, data_type, offset) in infos {
-        let n: usize = shape.iter().product();
-        let n_bytes = match data_type {
-            TYPE_F32 => n * 4,
-            TYPE_F16 => n * 2,
-            TYPE_Q8_0 => n / quant::Q8_0_BLOCK * quant::Q8_0_BYTES,
-            other => {
-                return Err(format!(
-                    "tensor {name} has type {other}; this engine reads only F32, F16 and Q8_0"
-                )
-                .into())
-            }
-        };
-        let start = data_start + offset;
-        let raw = bytes
-            .get(start..start + n_bytes)
-            .ok_or_else(|| format!("tensor {name} goes past the end of the file"))?;
-        let data = match data_type {
-            TYPE_F32 => quant::f32_from_bytes(raw),
-            TYPE_F16 => quant::f16_to_f32(raw),
-            _ => quant::dequantize_q8_0(raw),
-        };
-        if data.len() != n {
-            return Err(format!("tensor {name}: {n} values do not fill whole Q8_0 blocks").into());
-        }
-        tensors.insert(name, Tensor { shape, data });
-    }
-
-    Ok(Gguf { metadata, tensors })
+    // TODO 4. The tensor data.
+    //   - The data section starts at the first multiple of the alignment that
+    //     is at or after `r.pos`. The alignment is the metadata value
+    //     "general.alignment", or 32 if the file does not have it.
+    //     Hint: `usize::div_ceil`.
+    //   - The number of values in a tensor is the product of its shape.
+    //   - The number of bytes: 4 for each F32 value, 2 for each F16 value, and
+    //     `Q8_0_BYTES` for each block of `Q8_0_BLOCK` values in Q8_0. For all
+    //     other types, return an error.
+    //   - `bytes.get(start..start + n_bytes)` gives the bytes of one tensor,
+    //     or `None` if the file is too short.
+    //   - Convert the bytes with your functions in quant.rs, and put a
+    //     `Tensor` into a `HashMap<String, Tensor>`.
+    //
+    // Then return `Ok(Gguf { metadata, tensors })`.
+    todo!("load")
 }
 
 /// Reads little-endian values from a byte slice, from the start to the end.
@@ -175,37 +144,38 @@ impl<'a> Reader<'a> {
 
     /// A GGUF string is a u64 length, then that many UTF-8 bytes.
     fn string(&mut self) -> Result<String> {
-        let len = self.u64()? as usize;
-        Ok(String::from_utf8_lossy(self.take(len)?).into_owned())
+        // TODO: Read the u64 length, then take that many bytes.
+        // Hint: `String::from_utf8_lossy(bytes).into_owned()` makes a String.
+        todo!("string")
     }
 
     /// Reads one metadata value of the given GGUF value type.
     fn value(&mut self, value_type: u32) -> Result<Value> {
-        Ok(match value_type {
-            0 => Value::UInt(self.take(1)?[0] as u64),
-            1 => Value::Int(self.take(1)?[0] as i8 as i64),
-            2 => Value::UInt(u16::from_le_bytes(self.take(2)?.try_into()?) as u64),
-            3 => Value::Int(i16::from_le_bytes(self.take(2)?.try_into()?) as i64),
-            4 => Value::UInt(self.u32()? as u64),
-            5 => Value::Int(i32::from_le_bytes(self.take(4)?.try_into()?) as i64),
-            6 => Value::Float(f32::from_le_bytes(self.take(4)?.try_into()?) as f64),
-            7 => Value::Bool(self.take(1)?[0] != 0),
-            8 => Value::Str(self.string()?),
-            9 => {
-                // An array is: the type of its items, a u64 count, the items.
-                let item_type = self.u32()?;
-                let count = self.u64()?;
-                let mut items = Vec::new();
-                for _ in 0..count {
-                    items.push(self.value(item_type)?);
-                }
-                Value::Array(items)
-            }
-            10 => Value::UInt(self.u64()?),
-            11 => Value::Int(i64::from_le_bytes(self.take(8)?.try_into()?)),
-            12 => Value::Float(f64::from_le_bytes(self.take(8)?.try_into()?)),
-            other => return Err(format!("unknown GGUF value type {other}").into()),
-        })
+        // TODO: Read one value of type `value_type`:
+        //
+        //   type | data              | Value variant
+        //   -----+-------------------+--------------
+        //     0  | u8   (1 byte)     | UInt
+        //     1  | i8   (1 byte)     | Int
+        //     2  | u16  (2 bytes)    | UInt
+        //     3  | i16  (2 bytes)    | Int
+        //     4  | u32  (4 bytes)    | UInt
+        //     5  | i32  (4 bytes)    | Int
+        //     6  | f32  (4 bytes)    | Float
+        //     7  | bool (1 byte)     | Bool (0 is false)
+        //     8  | string            | Str
+        //     9  | array             | Array
+        //    10  | u64  (8 bytes)    | UInt
+        //    11  | i64  (8 bytes)    | Int
+        //    12  | f64  (8 bytes)    | Float
+        //
+        // An array is: a u32 item type, a u64 count, then the items. Each item
+        // is a value too, so `value` can call itself.
+        //
+        // Hint: `i16::from_le_bytes(self.take(2)?.try_into()?)` reads an i16.
+        // Hint: read all types, also the ones that this engine does not use.
+        // If you skip a value, the next key starts at the wrong byte.
+        todo!("value")
     }
 }
 

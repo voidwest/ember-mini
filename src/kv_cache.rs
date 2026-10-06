@@ -4,6 +4,9 @@
 //! cache, the model must calculate the keys and values of the full text again
 //! for each new token. With a cache, the model calculates only the key and
 //! value of the newest token, and reads the earlier ones from here.
+//!
+//! EXERCISE 3. Write `start`, `store`, `key` and `value`. Check your work
+//! with `cargo test kv_cache`.
 
 pub struct KvCache {
     k: Vec<f32>,
@@ -26,23 +29,27 @@ impl KvCache {
     }
 
     fn start(&self, layer: usize, pos: usize) -> usize {
-        (layer * self.n_ctx + pos) * self.d_model
+        // TODO: Return the index in `k` (or `v`) where the vector of
+        // (`layer`, `pos`) starts. The layout is [layer][position][d_model]:
+        // one position holds `d_model` numbers, and one layer holds `n_ctx`
+        // positions.
+        todo!("start")
     }
 
     pub fn store(&mut self, layer: usize, pos: usize, k: &[f32], v: &[f32]) {
-        let s = self.start(layer, pos);
-        self.k[s..s + self.d_model].copy_from_slice(k);
-        self.v[s..s + self.d_model].copy_from_slice(v);
+        // TODO: Copy `k` and `v` into the cache at (`layer`, `pos`).
+        // Hint: `slice.copy_from_slice(other)` copies a slice of the same length.
+        todo!("store")
     }
 
     pub fn key(&self, layer: usize, pos: usize) -> &[f32] {
-        let s = self.start(layer, pos);
-        &self.k[s..s + self.d_model]
+        // TODO: Return the `d_model` numbers of the key at (`layer`, `pos`).
+        todo!("key")
     }
 
     pub fn value(&self, layer: usize, pos: usize) -> &[f32] {
-        let s = self.start(layer, pos);
-        &self.v[s..s + self.d_model]
+        // TODO: Return the `d_model` numbers of the value at (`layer`, `pos`).
+        todo!("value")
     }
 }
 

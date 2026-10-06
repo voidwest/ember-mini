@@ -10,6 +10,10 @@
 //!     x = x + mlp(layer_norm(x))           // process this token alone
 //! logits = output_head(layer_norm(x))
 //! ```
+//!
+//! EXERCISE 5. Write `Gpt2::forward`. The other parts are done: read
+//! `from_gguf` to see the shape of each weight. Check your work with
+//! `cargo test model`. This test needs the model file (see the README).
 
 use crate::kv_cache::KvCache;
 use crate::loader::Gguf;
@@ -138,52 +142,43 @@ impl Gpt2 {
         let c = &self.config;
         let d = c.d_model;
         let head_dim = d / c.n_heads;
-        let tok = token as usize;
 
-        // 1. Embedding: the vector of the token plus the vector of its position.
-        let mut x: Vec<f32> = (0..d)
-            .map(|i| self.wte[tok * d + i] + self.wpe[pos * d + i])
-            .collect();
+        // TODO 1. Embedding. Make `x`, a Vec of `d` numbers:
+        //   x[i] = (row `token` of wte)[i] + (row `pos` of wpe)[i]
+        // Hint: `wte` and `wpe` are row-major, so row `r` starts at `r * d`.
 
-        let mut h = vec![0.0; d];
-        for (layer, block) in self.blocks.iter().enumerate() {
-            // 2. Attention. Each head compares the query of this token with
-            // the keys of all tokens so far (this token included). The
-            // softmax of the scores gives the weight for each value vector.
-            // There are no later tokens yet, so no mask is necessary.
-            ops::layer_norm(&x, &block.ln_1.weight, &block.ln_1.bias, c.eps, &mut h);
-            let qkv = block.attn_qkv.forward(&h);
-            let (q, kv) = qkv.split_at(d);
-            let (k, v) = kv.split_at(d);
-            cache.store(layer, pos, k, v);
-
-            let scale = 1.0 / (head_dim as f32).sqrt();
-            let mut attn = vec![0.0; d];
-            for head in 0..c.n_heads {
-                let (lo, hi) = (head * head_dim, (head + 1) * head_dim);
-                let mut scores: Vec<f32> = (0..=pos)
-                    .map(|t| ops::dot(&q[lo..hi], &cache.key(layer, t)[lo..hi]) * scale)
-                    .collect();
-                ops::softmax(&mut scores);
-                for (t, &weight) in scores.iter().enumerate() {
-                    let value = &cache.value(layer, t)[lo..hi];
-                    for (out, &val) in attn[lo..hi].iter_mut().zip(value) {
-                        *out += weight * val;
-                    }
-                }
-            }
-            ops::add(&mut x, &block.attn_out.forward(&attn));
-
-            // 3. MLP: widen to 4 * d, apply GELU, narrow back to d.
-            ops::layer_norm(&x, &block.ln_2.weight, &block.ln_2.bias, c.eps, &mut h);
-            let mut up = block.mlp_up.forward(&h);
-            ops::gelu(&mut up);
-            ops::add(&mut x, &block.mlp_down.forward(&up));
-        }
-
-        // 4. The final norm, then one score for each token in the vocabulary.
-        ops::layer_norm(&x, &self.ln_f.weight, &self.ln_f.bias, c.eps, &mut h);
-        self.head.forward(&h)
+        // Then, for each block: `for (layer, block) in self.blocks.iter().enumerate()`
+        //
+        // TODO 2. Attention.
+        //   a. h = layer norm of x, with `block.ln_1` and `c.eps`.
+        //   b. qkv = block.attn_qkv.forward(&h). It has 3 * d numbers: the
+        //      query q, the key k and the value v, in that order.
+        //   c. Store k and v in `cache` at (layer, pos).
+        //   d. Make `attn`, a Vec of `d` zeros. For each head, use only the
+        //      numbers from `head * head_dim` to `(head + 1) * head_dim` of q,
+        //      of each key and of each value:
+        //        - For each position t from 0 to pos (this token too):
+        //          score[t] = dot(q, key at t) / sqrt(head_dim)
+        //        - Softmax the scores.
+        //        - The output of the head is the sum of score[t] * (value at t).
+        //          Put it into the same numbers of `attn`.
+        //   e. x = x + block.attn_out.forward(&attn). This is a residual
+        //      connection: the block adds to x and does not replace it.
+        //
+        //   Hint: the cache has keys and values only for positions 0 to pos,
+        //   so the token cannot see later tokens. That is the "causal mask",
+        //   and you do not need to write it.
+        //
+        // TODO 3. MLP.
+        //   a. h = layer norm of x, with `block.ln_2`.
+        //   b. up = block.mlp_up.forward(&h). It has 4 * d numbers.
+        //   c. GELU on `up`.
+        //   d. x = x + block.mlp_down.forward(&up)
+        //
+        // TODO 4. After the last block: h = layer norm of x with `self.ln_f`.
+        // Return `self.head.forward(&h)`: one score for each token in the
+        // vocabulary.
+        todo!("forward")
     }
 }
 

@@ -4,6 +4,9 @@
 //! engines keep the weights quantized and convert them inside the matmul,
 //! which uses 4x less memory. This engine does not, so that the math stays
 //! simple.
+//!
+//! EXERCISE 2. Write the three functions. Check your work with
+//! `cargo test quant`.
 
 use half::f16;
 
@@ -13,28 +16,27 @@ pub const Q8_0_BLOCK: usize = 32;
 pub const Q8_0_BYTES: usize = 2 + Q8_0_BLOCK;
 
 pub fn dequantize_q8_0(src: &[u8]) -> Vec<f32> {
-    let mut out = Vec::with_capacity(src.len() / Q8_0_BYTES * Q8_0_BLOCK);
-    let (blocks, _) = src.as_chunks::<Q8_0_BYTES>();
-    for block in blocks {
-        let d = f16::from_le_bytes([block[0], block[1]]).to_f32();
-        for &q in &block[2..] {
-            out.push(q as i8 as f32 * d);
-        }
-    }
-    out
+    // TODO: For each block of `Q8_0_BYTES` bytes:
+    //   1. Read the scale `d` from the first 2 bytes. It is an f16.
+    //   2. Read the 32 bytes after it. Each byte is a signed 8-bit value `q`.
+    //   3. Push `q * d` (as f32) for each of the 32 values.
+    //
+    // Hint: `src.as_chunks::<Q8_0_BYTES>()` gives the full blocks as arrays.
+    // Hint: `byte as i8` reads a byte as a signed number (255 becomes -1).
+    todo!("dequantize_q8_0")
 }
 
 pub fn f16_to_f32(src: &[u8]) -> Vec<f32> {
-    let (values, _) = src.as_chunks::<2>();
-    values
-        .iter()
-        .map(|&b| f16::from_le_bytes(b).to_f32())
-        .collect()
+    // TODO: Each f16 is 2 bytes, little-endian.
+    // Hint: `f16::from_le_bytes([b0, b1]).to_f32()`.
+    todo!("f16_to_f32")
 }
 
 pub fn f32_from_bytes(src: &[u8]) -> Vec<f32> {
-    let (values, _) = src.as_chunks::<4>();
-    values.iter().map(|&b| f32::from_le_bytes(b)).collect()
+    // TODO: Each f32 is 4 bytes, little-endian.
+    // Hint: `src.as_chunks::<4>()` gives `[u8; 4]` arrays, and
+    // `f32::from_le_bytes` changes one array into an f32.
+    todo!("f32_from_bytes")
 }
 
 #[cfg(test)]

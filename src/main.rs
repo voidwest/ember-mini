@@ -7,6 +7,12 @@
 //! ```
 //!
 //! Usage: `cargo run -- "your prompt" [number of new tokens]`
+//!
+//! EXERCISE 6. Write `generate`. Then run the program (see the README).
+
+// The exercises start as empty functions, so the compiler warns about unused
+// code. Remove this line when you finish all exercises.
+#![allow(dead_code, unused_variables, unused_mut, unused_imports)]
 
 mod kv_cache;
 mod loader;
@@ -90,32 +96,27 @@ fn generate(
     let n_prompt = tokens.len();
     let mut cache = KvCache::new(cfg.n_layers, cfg.n_ctx, cfg.d_model);
     let mut n_forward = 0;
-
-    // 3. Prefill: run all prompt tokens except the last one. This only fills
-    // the KV cache. The generation loop below runs the last prompt token.
-    for (pos, &token) in tokens[..n_prompt - 1].iter().enumerate() {
-        model.forward(token, pos, &mut cache);
-        n_forward += 1;
-    }
-
-    // 4. Generation: run the newest token, take the token with the highest
-    // score (greedy decoding), add it to the text, and do it again.
     let mut printed = 0;
-    for _ in 0..n_new {
-        let pos = tokens.len() - 1;
-        if pos >= cfg.n_ctx {
-            break; // no position embedding is left
-        }
-        let logits = model.forward(tokens[pos], pos, &mut cache);
-        n_forward += 1;
-        let next = ops::argmax(&logits) as u32;
-        if next == END_OF_TEXT {
-            break;
-        }
-        tokens.push(next);
-        print_new_text(tokenizer, &tokens[n_prompt..], &mut printed)?;
-    }
-    Ok(n_forward)
+
+    // TODO 1. Prefill. Run the prompt tokens through `model.forward`, at
+    // positions 0, 1, 2 and so on. This fills the KV cache.
+    // Hint: only the logits of the last prompt token are necessary. You can
+    // keep them, or you can run all prompt tokens except the last one here
+    // and let the loop below run the last one.
+
+    // TODO 2. Generation. Do these steps up to `n_new` times:
+    //   a. Take the token with the highest logit (`ops::argmax`). This is
+    //      greedy decoding.
+    //   b. If the token is END_OF_TEXT, stop.
+    //   c. Push it to `tokens`. Print the new text with
+    //      `print_new_text(tokenizer, &tokens[n_prompt..], &mut printed)?`.
+    //   d. Run the new token through `model.forward` at its position, to get
+    //      the logits for the next step.
+    //
+    // Hint: GPT-2 has position embeddings for `cfg.n_ctx` positions only.
+    // Do not run `model.forward` at position `cfg.n_ctx` or higher.
+    // Add 1 to `n_forward` for each call to `model.forward`, and return it.
+    todo!("generate")
 }
 
 /// Prints the part of the text of `new_tokens` that is not printed yet.

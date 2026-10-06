@@ -1,70 +1,75 @@
 //! The math. Every function works on plain f32 slices.
+//!
+//! EXERCISE 1. Write each function. Check your work with `cargo test ops`.
 
 /// `out = W x + b`. `W` has one row of `x.len()` numbers for each output.
 pub fn matvec(w: &[f32], b: Option<&[f32]>, x: &[f32], out: &mut [f32]) {
-    let cols = x.len();
-    for (row, o) in out.iter_mut().enumerate() {
-        *o = dot(&w[row * cols..(row + 1) * cols], x);
-        if let Some(b) = b {
-            *o += b[row];
-        }
-    }
+    // TODO: For each output `row`, calculate the dot product of row `row` of
+    // `w` with `x`. If there is a bias, add `b[row]`.
+    //
+    // Hint: `w` is a flat slice in row-major order: row 0, then row 1, and so
+    // on. Each row has `x.len()` numbers, so row `r` starts at `r * x.len()`.
+    // Hint: use your `dot` function.
+    todo!("matvec")
 }
 
 pub fn dot(a: &[f32], b: &[f32]) -> f32 {
-    a.iter().zip(b).map(|(x, y)| x * y).sum()
+    // TODO: Multiply the pairs `a[i] * b[i]`, then add all of them.
+    // Hint: `a.iter().zip(b)` gives the pairs.
+    todo!("dot")
 }
 
 /// Moves `x` to mean 0 and variance 1, then scales and shifts each value
 /// with the learned `weight` and `bias`.
 pub fn layer_norm(x: &[f32], weight: &[f32], bias: &[f32], eps: f32, out: &mut [f32]) {
-    let n = x.len() as f32;
-    let mean = x.iter().sum::<f32>() / n;
-    let var = x.iter().map(|v| (v - mean) * (v - mean)).sum::<f32>() / n;
-    let inv_std = 1.0 / (var + eps).sqrt();
-    for i in 0..x.len() {
-        out[i] = (x[i] - mean) * inv_std * weight[i] + bias[i];
-    }
+    // TODO: With n = x.len():
+    //   mean   = (sum of x[i]) / n
+    //   var    = (sum of (x[i] - mean)^2) / n        (divide by n, not n - 1)
+    //   out[i] = (x[i] - mean) / sqrt(var + eps) * weight[i] + bias[i]
+    //
+    // Hint: `eps` is a small number (1e-5 in GPT-2). It prevents a division
+    // by zero when all values are the same.
+    todo!("layer_norm")
 }
 
 /// GELU with the tanh approximation, as in the original GPT-2.
 pub fn gelu(x: &mut [f32]) {
-    let c = (2.0 / std::f32::consts::PI).sqrt();
-    for v in x.iter_mut() {
-        *v = 0.5 * *v * (1.0 + (c * (*v + 0.044715 * *v * *v * *v)).tanh());
-    }
+    // TODO: Change each value v in place:
+    //   gelu(v) = 0.5 * v * (1 + tanh(sqrt(2 / pi) * (v + 0.044715 * v^3)))
+    //
+    // Hint: `f32::tanh`, `f32::sqrt` and `std::f32::consts::PI`.
+    todo!("gelu")
 }
 
 /// Changes scores into probabilities that add up to 1. The subtraction of the
 /// maximum does not change the result, but it prevents overflow in `exp`.
 pub fn softmax(x: &mut [f32]) {
-    let max = x.iter().copied().fold(f32::NEG_INFINITY, f32::max);
-    let mut sum = 0.0;
-    for v in x.iter_mut() {
-        *v = (*v - max).exp();
-        sum += *v;
-    }
-    for v in x.iter_mut() {
-        *v /= sum;
-    }
+    // TODO: Change each value in place:
+    //   softmax(x)[i] = exp(x[i]) / (sum of exp(x[j]) for all j)
+    //
+    // Hint: `exp(1000.0)` is infinity in f32, and infinity / infinity is NaN.
+    // Subtract the largest value from each x[i] before `exp`. The result does
+    // not change, because the same factor goes into the top and the bottom
+    // of the fraction. The test `softmax_does_not_overflow_with_large_scores`
+    // checks this.
+    todo!("softmax")
 }
 
 /// `x += y`. The model uses this for the residual connections.
 pub fn add(x: &mut [f32], y: &[f32]) {
-    for (a, b) in x.iter_mut().zip(y) {
-        *a += b;
-    }
+    // TODO: Add each `y[i]` to `x[i]`.
+    todo!("add")
 }
 
 /// The index of the largest value.
 pub fn argmax(x: &[f32]) -> usize {
-    let mut best = 0;
-    for i in 1..x.len() {
-        if x[i] > x[best] {
-            best = i;
-        }
-    }
-    best
+    // TODO: Find the index of the largest value. If two values are equal,
+    // return the first index.
+    //
+    // Hint: `f32` does not implement `Ord` (because of NaN), so
+    // `x.iter().max()` does not compile. A loop that remembers the index of
+    // the largest value so far is sufficient.
+    todo!("argmax")
 }
 
 #[cfg(test)]
